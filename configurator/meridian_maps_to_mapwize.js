@@ -4,6 +4,7 @@ var MapwizeApi = require("mapwize-node-api");
 var program = require("commander");
 var request = require("request");
 const svgToImg = require("svg-to-img");
+var sizeOf = require('image-size');
 
 program
     .option("-o, --mapwizeOrganization <organizationId>", "Mapwize Organization Id")
@@ -45,7 +46,7 @@ async.series([
                 if (response.statusCode != "200") {
                     next("Meridian http request status code should be 200.");
                 } else {
-                    meridianData = JSON.parse(body).results
+                    meridianData = JSON.parse(body).results;
                     next()
                 }
             }
@@ -105,7 +106,7 @@ async.series([
 
     // Download the SVG from the map from Meridian
     next => {
-        console.log('- Dwonload all SVG from Meridian map');
+        console.log('- Download all SVG from Meridian map');
 
         async.eachOfSeries(meridianData, function (data, i, callback) {
 
@@ -199,6 +200,9 @@ async.series([
 
         async.eachOfSeries(meridianData, function (data, i, callback) {
             if (data.gps_ref_points) {
+
+                var dimensions = sizeOf(new Buffer(data.img));
+
                 var georef = data.gps_ref_points.split(",")
 
                 var georeference = {
@@ -207,13 +211,13 @@ async.series([
                             longitude: georef[1],
                             latitude: georef[0],
                             x: georef[4],
-                            y: georef[5]
+                            y: dimensions.height-georef[5]
                         },
                         {
                             longitude: georef[3],
                             latitude: georef[2],
                             x: georef[6],
-                            y: georef[7]
+                            y: dimensions.height-georef[7]
                         }
                     ]
                 }

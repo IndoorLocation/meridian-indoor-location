@@ -11,6 +11,8 @@ program
   .option("-l, --meridianLocation <locationId>", "Meridian Location Id")
   .option("-t, --meridianToken <token>", "Meridian Auth Token")
   .option("-d, --meridianDomain <domain>", "Meridian Domain - default edit.meridianapps.com")
+  .option("-s, --serverUrl <serverUrl>", "Server url - default mapwize.io")
+
   .parse(process.argv)
 
 if (!program.mapwizeOrganization || !program.mapwizeVenue || !program.mapwizeApiKey || !program.meridianLocation || !program.meridianToken || !program.meridianDomain) {
@@ -19,7 +21,7 @@ if (!program.mapwizeOrganization || !program.mapwizeVenue || !program.mapwizeApi
 }
 
 //Mapwize API
-const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganization);
+const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganization, { serverUrl: program.serverUrl });
 
 var meridianData;
 var rasterSources;
@@ -89,13 +91,43 @@ async.series([
   },
 
   next => {
+    console.log('- Get params from raster source');
+
+    async.eachOf(rasterSources, function (data, i, callback) {
+
+      mapwizeAPI.getRasterSourceParams(program.mapwizeVenue, data._id, function (err, infos) {
+        if (err) {
+          callback(err)
+        } else {
+          data.bbox = infos.bbox;
+          callback()
+        }
+      })
+    }, function (err) {
+      if (err) {
+        next(err);
+      } else {
+        next();
+      }
+    });
+  },
+
+  next => {
     console.log('- Update georeference');
 
     async.eachOf(rasterSources, function (data, i, callback) {
 
-      var georef = data.georeference.points[0].longitude + ',' + data.georeference.points[0].latitude + ',' + data.georeference.points[1].longitude + ','
-        + data.georeference.points[1].latitude + ',' + data.georeference.points[0].x + ',' + data.georeference.points[0].y + ',' + data.georeference.points[1].x
-        + ',' + data.georeference.points[1].y
+
+      var georef = [
+        data.georeference.points[0].latitude,
+        data.georeference.points[0].longitude,
+        data.georeference.points[1].latitude,
+        data.georeference.points[1].longitude,
+        data.georeference.points[0].x,
+        data.bbox[3]-data.georeference.points[0].y,
+        data.georeference.points[1].x,
+        data.bbox[3]-data.georeference.points[1].y
+      ];
 
       var mapId = _.find(meridianData, function (o) { return o.name == data.name.split("Meridian | ")[1] }).id
 
@@ -105,10 +137,10 @@ async.series([
         headers:
           { Authorization: 'Token ' + program.meridianToken },
         body:
-          { gps_ref_points: georef },
+          { gps_ref_points: georef.join(',') },
         json: true
       };
-
+      
       request(options, function (error, response, body) {
         if (error) {
           callback(err);

@@ -20,6 +20,7 @@
     "async": "^3.1.0",
     "buffer-to-uint8array": "1.1.0",
     "commander": "^3.0.1",
+    "image-size": "^0.7.4",
     "lodash": "^4.17.15",
     "mapwize-node-api": "^1.0.4",
     "svg-to-img": "^2.0.9"
