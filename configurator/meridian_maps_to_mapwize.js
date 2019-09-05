@@ -12,15 +12,16 @@ program
     .option("-l, --meridianLocation <locationId>", "Meridian Location Id")
     .option("-t, --meridianToken <token>", "Meridian Auth Token")
     .option("-d, --meridianDomain <domain>", "Meridian Domain - default edit.meridianapps.com")
+    .option("-s, --serverUrl <serverUrl>", "Server url - default mapwize.io")
     .parse(process.argv)
 
-if (!program.mapwizeOrganization || !program.mapwizeVenue || !program.mapwizeApiKey || !program.meridianLocation || !program.meridianToken || !program.meridianDomain) {
-    console.log("Arguments --organizationId, --venueId, --apiKey, --meridianLocation, --meridianToken and --meridianDomain are required");
+if (!program.mapwizeOrganization || !program.mapwizeVenue || !program.mapwizeApiKey || !program.meridianLocation || !program.meridianToken || !program.meridianDomain || !program.serverUrl) {
+    console.log("Arguments --organizationId, --venueId, --apiKey, --meridianLocation, --meridianToken, --meridianDomain and --serverUrl are required");
     process.exit(1);
 }
 
 //Mapwize API
-const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganization);
+const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganization, { serverUrl: program.serverUrl });
 
 var meridianData;
 var rasterSources;
@@ -30,7 +31,6 @@ async.series([
     // Get list of maps for Location from Meridian
     next => {
         console.log('- Retrives Meridian data');
-
         var options = {
             method: 'GET',
             url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps',
@@ -71,7 +71,7 @@ async.series([
     next => {
         console.log('- Create a rasterSource if not exists');
 
-        async.eachOf(meridianData, function (data, i, callback) {
+        async.eachOfSeries(meridianData, function (data, i, callback) {
             var rasterSource = _.find(rasterSources, ["name", "Meridian | " + data.name])
 
             if (!rasterSource) {
@@ -204,14 +204,14 @@ async.series([
                 var georeference = {
                     points: [
                         {
-                            longitude: georef[0],
-                            latitude: georef[1],
+                            longitude: georef[1],
+                            latitude: georef[0],
                             x: georef[4],
                             y: georef[5]
                         },
                         {
-                            longitude: georef[2],
-                            latitude: georef[3],
+                            longitude: georef[3],
+                            latitude: georef[2],
                             x: georef[6],
                             y: georef[7]
                         }
@@ -246,3 +246,36 @@ async.series([
         process.exit(0);
     }
 });
+
+// 1) Get list of maps for Location from Meridian
+// https://edit-eu.meridianapps.com/api/locations/{{Location ID}}/maps
+// Header Authorization = Token {meridianToken}
+
+// 2) Get list of raster sources for venue in Mapwize
+
+/*
+   3) For each map in Meridian:
+        - create (if not exists) a rasterSource in Mapwize with name "Meridian | {map name}"
+        - download the SVG from the map from Meridian https://edit-eu.meridianapps.com/api/locations/{{Location ID}}/maps/{{Map ID}}.svg (use Auth header)
+        - convert the SGV to png using svg2png module
+            var svgBuffer = new Buffer(svg, "utf8")
+            fs.writeFileSync(path.resolve(__dirname , 'map.png'), svg2png.sync(svgBuffer));
+        - upload the png to the raster source + run setup job
+        - if the meridian map object contains gps_ref_points, use that to create a georeference (The first four values are the longitude and latitude GPS coordinates for the two reference points. The last four values are the X and Y coordinates for the two reference points on the map.)
+            var georeference = {
+                points: [
+                    {
+                        longitude: gps_ref_points[1],
+                        latitude: gps_ref_points[0],
+                        x: gps_ref_points[4],
+                        y: gps_ref_points[5]
+                    },
+                    {
+                        longitude: gps_ref_points[2],
+                        latitude: gps_ref_points[3],
+                        x: gps_ref_points[6],
+                        y: gps_ref_points[7]
+                    }
+                ]
+            }
+*/

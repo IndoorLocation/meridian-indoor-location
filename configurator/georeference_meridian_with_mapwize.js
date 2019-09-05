@@ -71,8 +71,6 @@ async.series([
 
     async.eachOf(rasterSources, function (data, i, callback) {
 
-      data.mapId = _.find(meridianData, function (o) { return o.name == data.name.split("Meridian | ")[1] }).id
-
       mapwizeAPI.getRasterSourceConfig(program.mapwizeVenue, data._id, function (err, infos) {
         if (err) {
           callback(err)
@@ -99,13 +97,15 @@ async.series([
         + data.georeference.points[1].latitude + ',' + data.georeference.points[0].x + ',' + data.georeference.points[0].y + ',' + data.georeference.points[1].x
         + ',' + data.georeference.points[1].y
 
+      var mapId = _.find(meridianData, function (o) { return o.name == data.name.split("Meridian | ")[1] }).id
+
       var options = {
         method: 'PUT',
-        url: 'https://edit-eu.meridianapps.com/api/locations/' + program.meridianLocation + '/maps/' + data.id,
+        url: 'https://edit-eu.meridianapps.com/api/locations/' + program.meridianLocation + '/maps/' + mapId,
         headers:
           { Authorization: 'Token ' + program.meridianToken },
         body:
-          { georeference: georef },
+          { gps_ref_points: georef },
         json: true
       };
 
