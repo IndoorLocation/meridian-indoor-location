@@ -1,11 +1,9 @@
 var _ = require('lodash');
 var async = require('async');
-var svg2png = require("svg2png");
 var MapwizeApi = require("mapwize-node-api");
 var program = require("commander");
 var request = require("request");
 const svgToImg = require("svg-to-img");
-const fs = require("fs");
 
 program
     .option("-o, --mapwizeOrganization <organizationId>", "Mapwize Organization Id")
