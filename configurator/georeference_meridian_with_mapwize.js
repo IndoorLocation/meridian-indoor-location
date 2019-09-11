@@ -1,8 +1,7 @@
 var _ = require('lodash');
-var async = require('async');
 var MapwizeApi = require("mapwize-node-api");
 var program = require("commander");
-var request = require("request");
+var request = require("request-promise");
 
 program
     .option("-o, --mapwizeOrganization <organizationId>", "Mapwize Organization Id")
@@ -33,133 +32,95 @@ const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganiza
 var meridianMaps;
 var rasterSources;
 
-async.series([
+module.exports = (async () => {
 
-  next => {
+  try {
     console.log('- Retrieving Meridian Maps');
-        
-    var options = {
-      method: 'GET',
-      url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps',
-      headers:
-        { Authorization: 'Token ' + program.meridianToken }
-    };
+          
+      var options = {
+        method: 'GET',
+        url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps',
+        headers:
+          { Authorization: 'Token ' + program.meridianToken }
+      };
 
-    request(options, function (error, response, body) {
-      if (error) {
-        next(err);
-      } else {
-        if (response.statusCode != "200") {
-          next("Meridian http request status code should be 200.");
+      await request(options, function (error, response, body) {
+        if (error) {
+          throw error;
         } else {
-          meridianMaps = JSON.parse(body).results
-          next()
-        }
-      }
-
-    });
-  },
-
-  //  Get list of raster sources for venue in Mapwize
-  next => {
-    console.log('- Getting Mapwize raster sources');
-
-    mapwizeAPI.getVenueSources(program.mapwizeVenue, (err, sources) => {
-      if (err) {
-        next(err);
-      } else {
-        rasterSources = _.filter(sources, function (data) { return data.type == "raster" && data.name.includes("Meridian | ") })
-        next();
-      }
-    });
-  },
-
-  next => {
-    console.log('- Getting georeference for raster sources');
-
-    async.eachOf(rasterSources, function (data, i, callback) {
-
-      mapwizeAPI.getRasterSourceConfig(program.mapwizeVenue, data._id, function (err, infos) {
-        if (err) {
-          callback(err)
-        } else {
-          data.georeference = infos.georeference;
-          callback()
-        }
-      })
-    }, next);
-  },
-
-  next => {
-    console.log('- Geting params from raster sources');
-
-    async.eachOf(rasterSources, function (data, i, callback) {
-
-      mapwizeAPI.getRasterSourceParams(program.mapwizeVenue, data._id, function (err, infos) {
-        if (err) {
-          callback(err)
-        } else {
-          data.bbox = infos.bbox;
-          callback()
-        }
-      })
-    }, next);
-  },
-
-  next => {
-    console.log('- Updating georeference in Meridian');
-
-    async.eachOf(rasterSources, function (data, i, nextSource) {
-
-      var meridianMap = _.find(meridianMaps, function (o) { return o.name == data.name.split("Meridian | ")[1] });
-      
-      if (meridianMap) {
-
-        var georef = [
-          data.georeference.points[0].latitude,
-          data.georeference.points[0].longitude,
-          data.georeference.points[1].latitude,
-          data.georeference.points[1].longitude,
-          data.georeference.points[0].x,
-          data.bbox[3]-data.georeference.points[0].y,
-          data.georeference.points[1].x,
-          data.bbox[3]-data.georeference.points[1].y
-        ];
-
-        var options = {
-          method: 'PUT',
-          url: program.meridianDomain + 'api/locations/' + program.meridianLocation + '/maps/' + meridianMap.id,
-          headers:
-            { Authorization: 'Token ' + program.meridianToken },
-          body:
-            { gps_ref_points: georef.join(',') },
-          json: true
-        };
-
-        request(options, function (error, response, body) {
-          if (error) {
-            nextSource(err);
+          if (response.statusCode != "200") {
+            throw Error("Meridian http request status code should be 200.");
           } else {
-            if (response.statusCode != "200") {
-              nextSource("Meridian http request status code should be 200.");
-            } else {
-              nextSource()
-            }
+            meridianMaps = JSON.parse(body).results;
           }
-        });
-      } else {
-        nextSource();
+        }
+      });
+
+      //  Get list of raster sources for venue in Mapwize
+
+      console.log('- Getting Mapwize raster sources');
+
+      const sources = await mapwizeAPI.getVenueSources(program.mapwizeVenue)      
+      rasterSources = _.filter(sources, data =>  data.type == "raster" && data.name.includes("Meridian | "))
+
+      console.log('- Getting georeference for raster sources');
+
+      for(const data of rasterSources) {
+        const infos = await mapwizeAPI.getRasterSourceConfig(program.mapwizeVenue, data._id) 
+        data.georeference = infos.georeference;
       }
-    }, next);
+
+      console.log('- Geting params from raster sources');
+
+      for(const data of rasterSources) {
+        const infos = await mapwizeAPI.getRasterSourceParams(program.mapwizeVenue, data._id)
+        data.bbox = infos.bbox;         
+      }
+
+      console.log('- Updating georeference in Meridian');
+
+      for(const data of rasterSources) {
+
+        var meridianMap = _.find(meridianMaps, o =>  o.name == data.name.split("Meridian | ")[1]);
+        
+        if (meridianMap) {
+
+          var georef = [
+            data.georeference.points[0].latitude,
+            data.georeference.points[0].longitude,
+            data.georeference.points[1].latitude,
+            data.georeference.points[1].longitude,
+            data.georeference.points[0].x,
+            data.bbox[3]-data.georeference.points[0].y,
+            data.georeference.points[1].x,
+            data.bbox[3]-data.georeference.points[1].y
+          ];
+
+          var options = {
+            method: 'PUT',
+            url: program.meridianDomain + 'api/locations/' + program.meridianLocation + '/maps/' + meridianMap.id,
+            headers:
+              { Authorization: 'Token ' + program.meridianToken },
+            body:
+              { gps_ref_points: georef.join(',') },
+            json: true
+          };
+
+          await request(options,(error, response, body) => {
+            if (error) {
+              throw error;
+            } else {
+              if (response.statusCode != "200") {
+                throw Error("Meridian http request status code should be 200.");
+              } 
+            }
+          });
+        } 
+      }
+          
+
+  } catch (error) {
+    console.log(error)
   }
 
-], function (err) {
-  if (err) {
-    console.log('ERR', err);
-    process.exit(1);
-  }
-  else {
-    console.log('DONE');
-    process.exit(0);
-  }
-});
+})();

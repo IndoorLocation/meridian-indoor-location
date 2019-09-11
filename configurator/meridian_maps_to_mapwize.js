@@ -1,8 +1,7 @@
 var _ = require('lodash');
-var async = require('async');
 var MapwizeApi = require("mapwize-node-api");
 var program = require("commander");
-var request = require("request");
+var request = require("request-promise");
 var svgToImg = require("svg-to-img");
 var sizeOf = require('image-size');
 
@@ -35,10 +34,11 @@ const mapwizeAPI = new MapwizeApi(program.mapwizeApiKey, program.mapwizeOrganiza
 var meridianMaps;
 var rasterSources;
 
-async.series([
-
-    next => {
+module.exports = (async () => {
+    
+    try {
         console.log('- Retrieving Meridian Maps');
+
         var options = {
             method: 'GET',
             url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps',
@@ -46,130 +46,104 @@ async.series([
                 { Authorization: 'Token ' + program.meridianToken }
         };
 
-        request(options, function (error, response, body) {
-            if (error) {
-                next(err);
+        await request(options, (err, response, body) => {
+            if (err) {
+                throw (err);
             } else {
                 if (response.statusCode != "200") {
-                    next("Meridian http request status code should be 200.");
+                    console.log(error)("Meridian http request status code should be 200.");
                 } else {
                     meridianMaps = JSON.parse(body).results;
-                    next()
                 }
             }
         });
-    },
-
-    next => {
+        
         console.log('- Getting Mapwize raster sources');
 
-        mapwizeAPI.getVenueSources(program.mapwizeVenue, (err, sources) => {
-            if (err) {
-                next(err);
-            } else {
-                rasterSources = _.filter(sources, ["type", "raster"])
-                next();
-            }
-        });
-    },
+        const sources = await mapwizeAPI.getVenueSources(program.mapwizeVenue);
+        rasterSources = _.filter(sources, ["type", "raster"]);
 
-    // Create (if not exists) a rasterSource in Mapwize with name "Meridian | {map name}"
-    next => {
-        console.log('- Creating or updating raster sources in Mapwize');
+        // Create (if not exists) a rasterSource in Mapwize with name "Meridian | {map name}"
 
-        async.eachOfSeries(meridianMaps, function (maps, i, callback) {
+        for(const maps of meridianMaps ) {
             var rasterSource = _.find(rasterSources, ["name", "Meridian | " + maps.name])
 
-            if (!rasterSource) {
-                mapwizeAPI.createRasterSource(program.mapwizeVenue, { name: "Meridian | " + maps.name.toString() }, function (err, info) {
-                    if (err) {
-                        callback(err)
-                    } else {
-                        maps.rasterId = info._id
-                        callback();
-                    }
-                });
-            } else {
-                maps.rasterId = rasterSource._id
-                callback()
-            }
+            try {
+                if(!rasterSource) {
+                    const info = await mapwizeAPI.createRasterSource(program.mapwizeVenue, { name: "Meridian | " + maps.name.toString() });
+                    maps.rasterId = info._id;
+                } else {
+                    maps.rasterId = rasterSource._id
+                }
+            } catch (error) {
+                throw Errorconsole.log('CREATE RASTER', error)
+            }   
+        }
 
-        }, next);
-    },
-
-    next => {
         console.log('- Downloading SVG images from Meridian');
 
-        async.eachOfSeries(meridianMaps, function (maps, i, callback) {
-
+        for(const maps of meridianMaps) {
             var options = {
                 method: 'GET',
                 url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps/' + maps.id + '.svg',
                 headers:
                     { Authorization: 'Token ' + program.meridianToken }
             };
-
-            request(options, function (error, response, body) {
-                if (error) {
-                    callback(err);
-                } else {
-                    if (response.statusCode != "200") {
-                        callback("Meridian http request status code should be 200.");
+            try {
+                await request(options, (err, response, body) => {
+                    if (err) {
+                        throw (err);
                     } else {
-                        maps.img = body
-                        callback()
+                        if (response.statusCode != "200") {
+                            console.log(error)("Meridian http request status code should be 200.");
+                        } else {
+                            maps.img = body
+                        }
                     }
-                }
-            });
+                });
+                
+            } catch (error) {
+                throw Error('DOWLOAD ERR', error)
+            }  
+        }
 
-        }, next);
-    },
-
-    next => {
         console.log("- Converting svg to png")
 
-        await async.eachOfSeries(meridianMaps, async (maps) => {
-            const image = await svgToImg.from(maps.img).toPng();
-            maps.img = image;
-        });
-        next();
-    },
+        for(const maps of meridianMaps) {
+            try {
+                const image = await svgToImg.from(maps.img).toPng();
+                maps.img = image;
+            } catch (error) {
+                throw Error('PNG ERR', error)
+            }
+        }
 
-    next => {
         console.log("- Uploading png images to raster sources")
 
-        async.eachOfSeries(meridianMaps, function (maps, i, callback) {
-            mapwizeAPI.setRasterSourcePng(program.mapwizeVenue, maps.rasterId, maps.img, function (err, infos) {
-                if (err) {
-                    callback(err)
-                } else {
-                    callback()
-                }
-            })
-        }, next);
-    },
+        for(const maps of meridianMaps) {
+            try {
+                await mapwizeAPI.setRasterSourcePng(program.mapwizeVenue, maps.rasterId, maps.img);                
+            } catch (error) {
+                console.log('UPLOAD ERR', error)
+            }
+        };
 
-    next => {
         console.log("- Run Raster Sources setup job")
 
-        async.eachOfSeries(meridianMaps, function (maps, i, callback) {
-            mapwizeAPI.runRasterSourceSetupJob(program.mapwizeVenue, maps.rasterId, function (err, infos) {
-                if (err) {
-                    callback(err)
-                } else {
-                    callback()
-                }
-            })
-        }, next);
-    },
+        for(const maps of meridianMaps) {
+            try {            
+                await mapwizeAPI.runRasterSourceSetupJob(program.mapwizeVenue, maps.rasterId)            
+            } catch (error) {
+                throw Error('RUN RASTER ERR', error)
+            }
+        };
 
-    next => {
         console.log("- Setting raster sources georeferences from Meridian if available")
 
-        async.eachOfSeries(meridianMaps, function (maps, i, callback) {
+        for(const maps of meridianMaps) {
             if (maps.gps_ref_points) {
 
-                var dimensions = sizeOf(new Buffer(maps.img));
+                var dimensions = sizeOf(maps.img);
                 var georef = maps.gps_ref_points.split(",")
                 var georeference = {
                     points: [
@@ -187,21 +161,15 @@ async.series([
                         }
                     ]
                 };
+                try {
+                    await mapwizeAPI.setRasterSourceConfig(program.mapwizeVenue, maps.rasterId, { georeference: georeference });                    
+                } catch (error) {
+                    throw Error('GEOREFERENCE ERR', error)
+                }
+            } 
+        };
 
-                mapwizeAPI.setRasterSourceConfig(program.mapwizeVenue, maps.rasterId, { georeference: georeference }, callback);
-            } else {
-                callback()
-            }
-        }, next);
-    },
-
-], function (err) {
-    if (err) {
-        console.log('ERR', err);
-        process.exit(1);
+    } catch (error) {
+        console.log(error)
     }
-    else {
-        console.log('DONE');
-        process.exit(0);
-    }
-});
+})();
