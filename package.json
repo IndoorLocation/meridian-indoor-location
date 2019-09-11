@@ -1,0 +1,29 @@
+{
+  "name": "meridian-indoor-location",
+  "version": "1.0.0",
+  "description": "Scripts to connect Aruba Meridian indoor location solution with Mapwize Indoor Maps",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IndoorLocation/meridian-indoor-location.git"
+  },
+  "author": "Mapwize",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/IndoorLocation/meridian-indoor-location/issues"
+  },
+  "homepage": "https://github.com/IndoorLocation/meridian-indoor-location#readme",
+  "dependencies": {
+    "async": "^3.1.0",
+    "buffer-to-uint8array": "1.1.0",
+    "commander": "^3.0.1",
+    "image-size": "^0.7.4",
+    "lodash": "^4.17.15",
+    "mapwize-node-api": "^2.0.0",
+    "request-promise": "^4.2.4",
+    "svg-to-img": "^2.0.9"
+  }
+}
