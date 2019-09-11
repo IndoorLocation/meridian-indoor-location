@@ -98,7 +98,7 @@ module.exports = (async () => {
 
           var options = {
             method: 'PUT',
-            url: program.meridianDomain + 'api/locations/' + program.meridianLocation + '/maps/' + meridianMap.id,
+            url: program.meridianDomain + '/api/locations/' + program.meridianLocation + '/maps/' + meridianMap.id,
             headers:
               { Authorization: 'Token ' + program.meridianToken },
             body:
