@@ -17,7 +17,7 @@
   },
   "homepage": "https://github.com/IndoorLocation/meridian-indoor-location#readme",
   "dependencies": {
-    "async": "^3.1.0",
+    "async": "^3.2.2",
     "buffer-to-uint8array": "1.1.0",
     "commander": "^3.0.1",
     "image-size": "^0.7.4",
